@@ -1,0 +1,147 @@
+The initial thought is to retrieve the crime_scene_report of the particular murder by using where clause with the given information about the murder
+
+select*
+from crime_scene_report
+where type='murder' and city='SQL City' and date =20180115
+
+Result:- 
+
+ date      	 type	                                                 description	                                                            city
+20180115	  murder	Security footage shows that there were 2 witnesses. The first witness lives at the last house on "Northwestern Dr".   SQL City
+                                               The second witness, named Annabel, lives somewhere on "Franklin Ave".	
+                                               
+                                              
+My immediate response after finding the information about the two witnesses is to inner join interview table and person table on person id and id,
+using where clause for address as below
+
+select*
+from interview
+join person
+on interview.person_id=person.id
+where address_street_name='Northwestern Dr' or address_street_name='Franklin Ave';
+
+However this query resulted in all the people with those addresses which is of no use.
+
+Changed my approach this time with same query as above but little modification in where clause as below:
+
+select*
+from interview
+join person
+on interview.person_id=person.id
+where name like '%Annabel%' and  address_street_name='Franklin Ave';
+
+Result:- 
+
+person_id             	transcript	           id	      name     	license_id	 address_number	address_street_name	    ssn
+16371   	      I saw the murder happen,	   16371	Annabel Miller	490173	        103	          Franklin Ave	    318771143
+       and I recognized the killer from my gym 
+ when I was working out last week on January the 9th.
+ 
+ That's it , found a clue regarding the murderer. He/she went to gym on January 9th.
+ 
+ Now its time to find what the second witness had to say regarding the murderer. Used this simple query to retrieve the statement.
+ 
+ select*
+from interview
+join person
+on interview.person_id=person.id
+where  address_street_name='Northwestern Dr'
+order by address_number Desc
+limit 1;
+
+Result:-
+
+person_id	                    transcript	                        id	      name	    license_id	address_number   	address_street_name	    ssn
+  14887	    I heard a gunshot and then saw a man run out.	      14887 	Morty Schapiro	118009	         4919	       Northwestern Dr	 111564949
+         He had a "Get Fit Now Gym" bag. The membership number 
+      on the bag started with "48Z". Only gold members have those bags.
+      The man got into a car with a plate that included "H42W".
+  
+Found most crucial clue regarding gym membership number and car plate number.
+
+Retreiving data from get_fit_now_check_in table with the following query
+
+select*
+from get_fit_now_check_in
+where check_in_date=20180109 and membership_id like "48Z%";
+
+Result:- 
+
+membership_id	check_in_date	check_in_time	check_out_time
+   48Z7A	       20180109      	1600	         1730
+   48Z55	       20180109      	1530	         1700
+
+Not of much use.
+
+Then the idea of joining get_fit_now_check_in and get_fit_now_member tables came and executed as below:
+
+select*
+from get_fit_now_check_in
+join get_fit_now_member
+on get_fit_now_check_in.membership_id=get_fit_now_member.id
+where check_in_date=20180109 and membership_id like "48Z%";
+
+Result:- 
+
+membership_id	check_in_date	check_in_time	check_out_time	id	  person_id	    name    	membership_start_date	membership_status
+    48Z7A       	20180109	    1600	         1730   	48Z7A    	28819	  Joe Germuska	       20160305	           gold
+    48Z55	        20180109	    1530	         1700	    48Z55	    67318	  Jeremy Bowers	       20160101	           gold
+    
+    Narrowed down the investigation to two final suspects;  Joe and Jeremy.
+    
+Its time to use the car plate number clue to find the murderer..
+
+I inner joined 4 tables get_fit_now_check_in,get_fit_now_member,person, drivers_license with a where clause as below
+
+select get_fit_now_member.name
+from get_fit_now_check_in
+inner join get_fit_now_member
+on get_fit_now_check_in.membership_id=get_fit_now_member.id
+inner join person
+on get_fit_now_member.name=person.name
+inner join drivers_license
+on person.license_id=drivers_license.id
+where check_in_date=20180109 and membership_id like "48Z%" and plate_number like "%H42W%";    
+
+Result:-
+
+   name
+Jeremy Bowers
+
+The murderer was caught, thanks to SQL.
+
+
+Next the challenge was to find the master mind behind this murder by using two queries only.
+
+First we need to read the transcript of the murderer of his interview; we did by writing the query below...
+
+select interview.transcript
+from interview
+join person
+on interview.person_id=person.id
+where name='Jeremy Bowers';
+
+Result:- 
+
+                                             transcript
+I was hired by a woman with a lot of money. I don't know her name but I know she's around 5'5" (65") or 5'7" (67"). 
+She has red hair and she drives a Tesla Model S. I know that she attended the SQL Symphony Concert 3 times in December 2017.
+
+The second and final query to find the master mind behind the murder is as follows:
+
+select person.name,facebook_event_checkin.date,facebook_event_checkin.event_name
+from facebook_event_checkin
+inner join person
+on facebook_event_checkin.person_id=person.id
+inner join drivers_license
+on person.license_id=drivers_license.id
+where car_make = "Tesla" and car_model="Model S" and gender = "female" and hair_color="red";
+
+Result:- 
+
+      name         	date	       event_name
+Miranda Priestly	20171206	SQL Symphony Concert
+Miranda Priestly	20171212	SQL Symphony Concert
+Miranda Priestly	20171229	SQL Symphony Concert
+
+The master mind behind the murder is Miranda Priestly
